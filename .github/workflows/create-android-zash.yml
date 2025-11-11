@@ -52,7 +52,7 @@ jobs:
 
           if [ "$LATEST_TAG" = "$LAST_TAG" ]; then
             echo "No new release, skipping build."
-            exit 78
+            exit 0
 
           fi
           echo "SAVED_TAG=$LATEST_TAG" >> $GITHUB_OUTPUT
