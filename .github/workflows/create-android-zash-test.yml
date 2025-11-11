@@ -1,4 +1,4 @@
-name: Build Android zash
+name: Build Android zash Test
 run-name: Creating Production Ready Android App 🚀 Z-Test
 on:
   workflow_dispatch:
