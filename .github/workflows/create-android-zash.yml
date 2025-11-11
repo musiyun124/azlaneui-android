@@ -73,9 +73,11 @@ jobs:
         run: if [ ! -d "./android" ]; then npx cap add android; fi
 
       - name: Capacitor update
+        if: env.SKIP_BUILD != 'true'
         run: npx cap update
 
       - name: Capacitor copy
+        if: env.SKIP_BUILD != 'true'
         run: npx cap copy
 
       - name: Generate icons and splash screen
