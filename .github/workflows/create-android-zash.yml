@@ -169,8 +169,7 @@ jobs:
 
       # -------------------- Push Signed APK to Telegram (with Zashboard changelog) --------------------
       - name: 📤 推送 APK 到 Telegram（含 Zashboard 更新日志）
-        if: env.SKIP_BUILD != 'true'
-        if: success()
+        if: success() && env.SKIP_BUILD != 'true'
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}      # Telegram Bot Token
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}          # Telegram 群组或频道 ID
@@ -218,8 +217,7 @@ jobs:
 
       # -------------------- 如果构建失败或无 APK，则发送通知 --------------------
       - name: ⚠️ 构建失败或无文件通知 Telegram
-        if: env.SKIP_BUILD != 'true'
-        if: failure() || env.NO_APK_FOUND == 'true'
+        if: (failure() || env.NO_APK_FOUND == 'true') && env.SKIP_BUILD != 'true'
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
