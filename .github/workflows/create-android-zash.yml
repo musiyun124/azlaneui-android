@@ -183,7 +183,7 @@ jobs:
             | sed 's/^## //g' \
             | sed 's/^### //g' \
             | sed 's/^\* /- /g' \
-            | sed 's/\r//g')  # 去掉回车符
+            | sed 's/\r//g' \
             | sed -E 's/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/[\1](\2)/g')
 
           FILE_NAME=$(basename "$FINAL_APK_PATH")
