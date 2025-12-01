@@ -1,5 +1,5 @@
-name: Build Android zash Test
-run-name: Creating Production Ready Android App 🚀 Z-Test
+name: Build Android zash
+run-name: Creating Production Ready Android App 🚀 Z
 on:
   workflow_dispatch:
   schedule:
@@ -170,7 +170,7 @@ jobs:
           git commit -m "Update last build tag to ${{ steps.check_new_release.outputs.SAVED_TAG }}"
           git push
 
-      # -------------------- Push Signed APK to Telegram (with Zashboard changelog) --------------------
+      # -------------------- Push Signed APK to Telegram (with Zashboard changelog, auto-split) --------------------
       - name: 📤 推送 APK 到 Telegram（含 Zashboard 更新日志）
         if: success() && env.SKIP_BUILD != 'true'
         env:
@@ -193,28 +193,61 @@ jobs:
           echo "🧾 获取 Zashboard 更新日志（Tag: ${BUILD_TAG}）..."
           ZASHBOARD_REPO="Zephyruso/zashboard"
           RELEASE_JSON=$(curl -s "https://api.github.com/repos/$ZASHBOARD_REPO/releases/tags/${BUILD_TAG}")
+
           RELEASE_NAME=$(echo "$RELEASE_JSON" | jq -r '.name // "'"${BUILD_TAG}"'"')
           RELEASE_DATE=$(echo "$RELEASE_JSON" | jq -r '.published_at // ""' | cut -d'T' -f1)
           RELEASE_BODY=$(echo "$RELEASE_JSON" | jq -r '.body // "No changelog provided."')
+
+          # -------------------- 格式清洗 --------------------
           CLEAN_BODY=$(echo "$RELEASE_BODY" \
+            | sed 's/\r//g' \
             | sed 's/^## //g' \
             | sed 's/^### //g' \
-            | sed 's/^\* /      - /g' \
-            | sed 's/\r//g' \
-            | sed -E 's/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/[\1](\2)/g')
+            | sed 's/^\* /      - /g'
+          )
 
+          # -------------------- Telegram 文本 --------------------
+          HEADER="📱 Azlaneui 新构建完成！
+         📦 Zashboard ${RELEASE_NAME} 更新日志 (${RELEASE_DATE})：
+
+          "
+
+          FULL_TEXT="${HEADER}${CLEAN_BODY}"
+
+          # -------------------- 分段发送（Telegram 限 4096 字节） --------------------
+          MAX=3500
+          CURRENT=""
+          while IFS= read -r line; do
+            if [ ${#CURRENT} -ge $MAX ]; then
+              echo "📤 分段发送 changelog..."
+              curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+                -d chat_id="${TG_CHAT_ID}" \
+                -d parse_mode="Markdown" \
+                --data-urlencode text="$CURRENT" >/dev/null
+              CURRENT=""
+            fi
+            CURRENT="${CURRENT}${line}\n"
+          done <<< "$FULL_TEXT"
+
+          if [ -n "$CURRENT" ]; then
+            echo "📤 发送最后一段 changelog..."
+            curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TG_CHAT_ID}" \
+              -d parse_mode="Markdown" \
+              --data-urlencode text="$CURRENT" >/dev/null
+          fi
+
+          # -------------------- 发送 APK --------------------
           FILE_NAME=$(basename "$FINAL_APK_PATH")
           FILE_SIZE=$(du -h "$FINAL_APK_PATH" | cut -f1)
 
-          echo "🚀 正在发送 $FILE_NAME ($FILE_SIZE) 到 Telegram..."
+          echo "🚀 正在发送 APK 文件 $FILE_NAME ($FILE_SIZE)..."
 
           curl -s -S -m 180 \
             -F document=@"$FINAL_APK_PATH" \
-            -F caption="📱 Azlaneui 新构建完成！
-             📦 Zashboard ${RELEASE_NAME} 更新日志 (${RELEASE_DATE})：
-             ${CLEAN_BODY}" \
+            -F caption="📱 Azlaneui APK 构建完成（${RELEASE_NAME}）" \
             "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument?chat_id=${TG_CHAT_ID}" \
-            | jq '.ok' || true
+            >/dev/null
 
           echo "✅ 已上传 APK 到 Telegram。"
 
