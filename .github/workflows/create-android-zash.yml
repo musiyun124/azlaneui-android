@@ -171,52 +171,66 @@ jobs:
           git push
 
       # -------------------- Push Signed APK to Telegram (with Zashboard changelog) --------------------
-      - name: 📤 推送 APK 到 Telegram（含 Zashboard 更新日志）
+      - name: 📤 推送 APK 到 Telegram（长日志分开发送，永不失败）
         if: success() && env.SKIP_BUILD != 'true'
         env:
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}      # Telegram Bot Token
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}          # Telegram 群组或频道 ID
-          BUILD_TAG: ${{ steps.check_new_release.outputs.SAVED_TAG }}  # 构建的 Tag
-          BUILD_TIME: ${{ steps.current-datetime.outputs.CURRENT_DATETIME }} # 构建时间
-          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} # Actions 运行链接
-          GITHUB_ACTOR: ${{ github.actor }}             # 触发者
-          FINAL_APK_PATH: ${{ steps.rename_apk.outputs.FINAL_APK_PATH }}  # 重命名后的 signed APK
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          APK_PATH: ${{ steps.rename_apk.outputs.FINAL_APK_PATH }}
+          TAG: ${{ steps.check_new_release.outputs.SAVED_TAG }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          echo "📦 上传最终 signed APK: $FINAL_APK_PATH"
+          echo "开始推送 Telegram..."
 
-          if [ ! -f "$FINAL_APK_PATH" ]; then
-            echo "⚠️ 文件不存在，跳过发送。"
-            echo "NO_APK_FOUND=true" >> $GITHUB_ENV
-            exit 0
-          fi
+          # 获取 Zashboard release 信息
+          JSON=$(curl -s "https://api.github.com/repos/Zephyruso/zashboard/releases/tags/$TAG")
+          NAME=$(echo "$JSON" | jq -r '.name // .tag_name')
+          DATE=$(echo "$JSON" | jq -r '.published_at // now' | cut -d'T' -f1)
+          BODY=$(echo "$JSON" | jq -r '.body // "无更新日志"')
 
-          echo "🧾 获取 Zashboard 更新日志（Tag: ${BUILD_TAG}）..."
-          ZASHBOARD_REPO="Zephyruso/zashboard"
-          RELEASE_JSON=$(curl -s "https://api.github.com/repos/$ZASHBOARD_REPO/releases/tags/${BUILD_TAG}")
-          RELEASE_NAME=$(echo "$RELEASE_JSON" | jq -r '.name // "'"${BUILD_TAG}"'"')
-          RELEASE_DATE=$(echo "$RELEASE_JSON" | jq -r '.published_at // ""' | cut -d'T' -f1)
-          RELEASE_BODY=$(echo "$RELEASE_JSON" | jq -r '.body // "No changelog provided."')
-          CLEAN_BODY=$(echo "$RELEASE_BODY" \
-            | sed 's/^## //g' \
-            | sed 's/^### //g' \
-            | sed 's/^\* /- /g' \
-            | sed 's/\r//g' \
-            | sed -E 's/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/[\1](\2)/g')
+          # 清理 Markdown 格式，适合 Telegram 显示
+          CLEAN_BODY=$(echo "$BODY" | sed -E '
+            s/^##?#?[[:space:]]?//g;
+            s/^\*[[:space:]]+/• /g;
+            s/^\-[[:space:]]+/• /g;
+            s/\r$//g
+          ')
 
-          FILE_NAME=$(basename "$FINAL_APK_PATH")
-          FILE_SIZE=$(du -h "$FINAL_APK_PATH" | cut -f1)
+          APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+          APK_NAME=$(basename "$APK_PATH")
 
-          echo "🚀 正在发送 $FILE_NAME ($FILE_SIZE) 到 Telegram..."
+          # 第一条：发送完整更新日志（支持 4096 字符，超长也没事）
+          TEXT="*Azlaneui 新版本已构建完成！*
 
-          curl -s -S -m 180 \
-            -F document=@"$FINAL_APK_PATH" \
-            -F caption="📱 Azlaneui 新构建完成！
-          📦 Zashboard ${RELEASE_NAME}更新日志：
-           ${CLEAN_BODY}" \
-            "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument?chat_id=${TG_CHAT_ID}" \
-            | jq '.ok' || true
+          *Zashboard 版本：* \`$NAME\` ($DATE)
+          *构建时间：* \`${{ steps.current-datetime.outputs.CURRENT_DATETIME }}\`
+          *触发者：* ${{ github.actor }}
 
-          echo "✅ 已上传 APK 到 Telegram。"
+          *更新内容：*
+          $CLEAN_BODY
+
+          APK 即将发送 ↓"
+
+          curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" \
+            -d chat_id="$TG_CHAT_ID" \
+            -d parse_mode="Markdown" \
+            -d disable_web_page_preview=true \
+            --data-urlencode text="$TEXT"
+
+          # 第二条：发送 APK 文件（caption 保持在 200 字以内，稳如老狗）
+          curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendDocument" \
+            -F chat_id="$TG_CHAT_ID" \
+            -F document=@"$APK_PATH" \
+            -F parse_mode="Markdown" \
+            -F caption="*Azlaneui $NAME* 已就绪！
+
+          大小：$APK_SIZE
+          版本：$NAME
+          [查看构建日志]($RUN_URL)
+
+          #Azlaneui #Zash"
+
+          echo "Telegram 推送成功（日志 + APK 分开发送）"
 
       # -------------------- 如果构建失败或无 APK，则发送通知 --------------------
       - name: ⚠️ 构建失败或无文件通知 Telegram
