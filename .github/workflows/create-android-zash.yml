@@ -204,7 +204,7 @@ jobs:
 
           *Zashboard 版本：* \`$NAME\` ($DATE)
           *构建时间：* \`${{ steps.current-datetime.outputs.CURRENT_DATETIME }}\`
-          *触发者：* ${{ github.actor }}
+          # *触发者：* ${{ github.actor }}
 
           *更新内容：*
           $CLEAN_BODY
@@ -226,9 +226,9 @@ jobs:
 
           大小：$APK_SIZE
           版本：$NAME
-          [查看构建日志]($RUN_URL)
+          # [查看构建日志]($RUN_URL)
 
-          #Azlaneui #Zash"
+          #Azlaneui #Zashboard #mihomo"
 
           echo "Telegram 推送成功（日志 + APK 分开发送）"
 
